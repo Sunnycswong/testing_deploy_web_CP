@@ -113,12 +113,10 @@ def docx():
     data = request.get_json()
     logging.info("API request param:", data)
     json_data = data["json_data"]
-    
+
     proposal_gpt.create_docx(json_data)
 
     return 
-
-
 
 
 
