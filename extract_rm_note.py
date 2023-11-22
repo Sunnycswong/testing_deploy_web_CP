@@ -197,122 +197,15 @@ json.dump(instruction_list, open("MTR_schema.json", "w"), indent=4)
 def cap(match):
     return(match.group().capitalize())
 
-#%%
-#Create a temp RM note 
-rm_note_file_name = "MTR_RM_note.json"
-rm_note_txt = """Client: HKMTR (Hong Kong Mass Transit Railway) Date: November 6, 2023 Relationship Manager: John Smith	
-Meeting Summary:	
-Today, I had a productive meeting with HKMTR's financial team to discuss their investment portfolio and upcoming financial needs.	
-Client Background:	
-HKMTR is a major public transportation company in Hong Kong.	
-They are a long-standing client with a substantial investment portfolio.	
-Discussion Points:	
-1. Portfolio Review: We reviewed their current investment portfolio, which includes a mix of equities, bonds, and some alternative investments. HKMTR expressed interest in exploring sustainable investment options.	
-2. Risk Tolerance: Confirmed that their risk tolerance remains moderate. They aim for steady growth and income generation to support their ongoing infrastructure projects.	
-3. Cash Flow Needs: HKMTR indicated a need for an upcoming capital injection to support the expansion of the East-West Corridor. We discussed potential financing options, including corporate bonds and project financing.	
-4. Sustainability Investments: Discussed potential ESG (Environmental, Social, and Governance) investment opportunities aligned with HKMTR's commitment to sustainability and public transportation efficiency.	
-5. Regulatory Updates: Provided an overview of recent regulatory changes and compliance requirements in the financial industry that may affect their investments.	
-Action Items:	
-Research and present sustainable investment opportunities suitable for HKMTR's portfolio.	
-Start the process for evaluating financing options for the East-West Corridor project.	
-Monitor the portfolio and keep HKMTR updated on market developments and performance.	
-Next Meeting:	
-Scheduled for December 4, 2023, to further discuss investment opportunities and progress on financing options.	"""
-json.dump([rm_note_txt], open(rm_note_file_name, "w"), indent=4)
-
-
-#%%
-#Create a temp RM note of GOGOVAN_RM_note
-rm_note_file_name = "GOGOVAN_RM_note.json"
-rm_note_txt = """Client: Gogovan
-Industry: Logistics and Delivery Services
-Date: 20 Nov 2023
-
-Meeting Summary:	
-Today, I evaluated Gogovan's credit proposal for their expansion plans, technology investments, and working capital needs.	
-
-Client Background:	
-Gogovan is a leading logistics and delivery service provider, offering on-demand delivery solutions to individuals and businesses. Established in 2013, the company has rapidly expanded its operations and established a strong presence in the market. Gogovan operates a user-friendly mobile application and web platform, connecting customers with a network of professional drivers and delivery partners.	
-
-Financial Performance:	
-Gogovan has demonstrated consistent revenue growth over the past few years, driven by increasing customer adoption and expansion into new markets. The company's financial statements reflect a healthy profitability margin, indicating effective cost management and operational efficiency. Cash flow from operations has been positive, providing a stable source of funds to support working capital requirements and ongoing business operations.	
-
-Market Position and Competitive Landscape:	
-Gogovan has successfully positioned itself as a market leader in the logistics and delivery industry, leveraging its strong brand recognition and innovative technology platform. The company has built a robust network of drivers and delivery partners, enabling quick and reliable service fulfillment. Gogovan's competitive advantage lies in its ability to offer cost-effective and flexible solutions tailored to meet the needs of various customer segments, including e-commerce, retail, and individual users.	
-
-Growth Strategy and Market Potential:	
-Gogovan has outlined a comprehensive growth strategy focused on expanding its geographical presence, diversifying its service offerings, and enhancing customer experience. The company plans to enter new markets, both domestically and internationally, to capture additional customer segments and increase market share. Gogovan aims to invest in technology and infrastructure improvements to streamline operations, optimize delivery routes, and enhance overall efficiency.	
-
-Risk Assessment:	
-The logistics industry is subject to various risks, including intense competition, regulatory changes, and economic downturns. Gogovan has implemented risk mitigation measures such as diversification of services and markets, maintaining strong relationships with key partners, and closely monitoring market trends. Operational risks, such as driver availability, vehicle maintenance, and service disruptions, are managed through rigorous driver screening, continuous training programs, and proactive maintenance schedules. Financial risks are mitigated by maintaining a healthy liquidity position, diversifying funding sources, and prudent financial management practices.	
-
-Credit Request and Repayment Plan:	
-Gogovan is requesting a credit facility of $10million to support its expansion plans, technology investments, and working capital needs. The proposed repayment plan consists of regular principal and interest payments over a 3 years term, aligning with the company's projected cash flow generation and financial performance.	
-
-Conclusion:	
-Gogovan has demonstrated a strong market position, consistent financial performance, and a well-defined growth strategy. With its robust operational capabilities, innovative technology platform, and customer-centric approach, the company is well-positioned to capitalize on the growing demand for logistics and delivery services. The proposed credit facility, in line with the company's financial projections, will support Gogovan's expansion plans and enable it to maintain its competitive edge in the market.	
-"""
-
-json.dump([rm_note_txt], open(rm_note_file_name, "w"), indent=4)
-
-
-#%%
-# old way to extract and create prompt
-rm_note_file_name = "GOGOVAN_RM_note.json"
-hierarchy_file_name = "hierarchy.json"
-schema_file_name = "schema.json"
-
-rm_note_txt = load_json(rm_note_file_name)[0]
-hierarchy_dict_list = load_json(hierarchy_file_name)
-schema_dict_list = load_json(schema_file_name)
-
-schema_dict_list_with_GPT = copy.deepcopy(schema_dict_list)
-for l in schema_dict_list_with_GPT:
-    section = l["Section"]
-    prompt = l['Prompt']
-    rm_note = l['RM Note']
-    document = l['Document']
-    example = l['Example']
-
-#%%
-prompt_template_for_extracting_rm_note = """
-    Read the RM note (Keyword: rm_note) to answer the input question (Keyword: Question):
-    
-    rm_note (Keyword: rm_note):
-    {rm_note}
-    ======
-    Question (Keyword: Question):
-    {question}
-    ======
-    
-    Then answer the question based on the above aggregrate context
-
-    Guidance when you do not have that information:
-    1. When you don't have the specific information based on rm_note (Keyword: rm_note), you have to write it in the following format: [Information not available]
-    2. You must not create the information by yourself if you don't have relevant information
-    3. You cannot say "It's unclear that", please refer to point 1 for the formatting for requesting further information
-
-    Rules you have to follow:
-    1. Please provide your answer in English
-    2. do not start your answer with "Based on the given information"
-    3. The example (Keyword: proposal_example) above is just for your reference only to improve your theme, you must not directly copy the content in the examples
-    4. If possible, try to expand the information provided from the RM
-    5. Do not create any figures by make-up 
-
-    Take a deep breath and work on this step by step
-    """
-rm_prompt_template = PromptTemplate(template=prompt_template_for_extracting_rm_note, input_variables=["rm_note", "question"])
-
-llm_rm_note = AzureChatOpenAI(deployment_name="gpt-35-16k", temperature=0.1,
-                        openai_api_version="2023-05-15", openai_api_base="https://pwcjay.openai.azure.com/")
-
 
 
 #%%
 #This funcition is to extract RM notes for web, call by app.py
 def web_extract_RM(rm_note_txt):
-    hierarchy_file_name = "hierarchy.json"
-    schema_file_name = "schema.json"
+
+    # read config files in config directory
+    hierarchy_file_name = "config/hierarchy.json"
+    schema_file_name = "config/schema.json"
 
     hierarchy_dict_list = load_json(hierarchy_file_name)
     schema_dict_list = load_json(schema_file_name)
@@ -367,15 +260,19 @@ def extract_rm_note(hierarchy_dict_list, rm_note, rm_prompt_template, llm, outpu
     output_dict_list = []
     for dictionary in hierarchy_dict_list:
         chain = LLMChain(llm=llm, prompt=rm_prompt_template)
-        dictionary["Value"] = chain({"rm_note":rm_note_txt, "question": dictionary["Question"]})['text']
+        dictionary["Value"] = chain({"rm_note":rm_note, "question": dictionary["Question"]})['text']
         dictionary["Value"] = dictionary["Value"].replace("Based on the given information, ", "")
         output_dict_list.append(dictionary)
-    json.dump(output_dict_list, open(output_json_name, "w"), indent=4)
+    # json.dump(output_dict_list, open(output_json_name, "w"), indent=4)
 
     return output_dict_list
 
+'''
 extract_rm_note(hierarchy_dict_list=hierarchy_dict_list
                 , rm_note=rm_note_txt 
                 , rm_prompt_template=rm_prompt_template
                 , llm=llm_rm_note
                 , output_json_name="GOGOVAN_hierarchy_rm_note.json")
+'''
+
+                

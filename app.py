@@ -44,19 +44,19 @@ def healthcheck():
     return {"status": "OK"}
 
 
-# route for RM_NOTES
-@app.route('/RM_note', methods=['POST'])
-def extract_RM():
+# route for extracting information from RM notes
+@app.route('/rm_note', methods=['POST'])
+def extract_rm_notes():
 
-    hierarchy_file_name = "hierarchy.json"
-    schema_file_name = "schema.json"
-    hierarchy_dict_list = extract_rm_note.load_json(hierarchy_file_name)
-    schema_dict_list = extract_rm_note.load_json(schema_file_name)
+    #hierarchy_file_name = "config/hierarchy.json"
+    #schema_file_name = "config/schema.json"
+    #hierarchy_dict_list = extract_rm_note.load_json(hierarchy_file_name)
+    #schema_dict_list = extract_rm_note.load_json(schema_file_name)
 
     data = request.get_json()
     logging.info("API request param:", data)
-    Client_name = data["Client_name"]
-    Client_name = Client_name + "_rm_note.json"
+    Client_name = data["client_name"]
+    # Client_name = Client_name + "_rm_note.json"
     rm_note_txt = data["rm_note_txt"]
     hierarchy_dict_list, rm_prompt_template, llm_rm_note, rm_note_txt = extract_rm_note.web_extract_RM(rm_note_txt)
     hierarchy_rm_note = extract_rm_note.extract_rm_note(hierarchy_dict_list=hierarchy_dict_list
@@ -80,7 +80,7 @@ def regen():
     logging.info("API request param:", data)
     section = data["section"]
     prompt = data["instruction"]
-    sector = proposal_gpt.edit_web_json(section,prompt)
+    sector = proposal_gpt.edit_web_json(section, prompt)
     # Convert the JSON response to a JSON-serializable format    
     # Return the JSON response
     #return jsonify(json_response)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
    app.run()
 
 #%%
-
+'''
 def extract_RM():
     data = [{"Client_name":"gogovan", "rm_note_txt":"123"}]
     Client_name = data[0]["Client_name"]
@@ -100,3 +100,4 @@ def extract_RM():
 # %%
 extract_RM()
 # %%
+'''
