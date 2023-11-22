@@ -68,21 +68,23 @@ def extract_RM():
     schema_with_rm_note = proposal_gpt.update_schema_json(schema_dict_list, hierarchy_rm_note, update_key='RM Note')
     first_RM_version = proposal_gpt.gen_first_web_and_json(schema_with_rm_note)
 
-    
+
     # Convert the JSON response to a JSON-serializable format    
     # Return the JSON response
     return jsonify(first_RM_version)
 
 @app.route('/regen', methods=['POST'])
 def regen():
+
     data = request.get_json()
     logging.info("API request param:", data)
-    question = data["question"]
-    sessionId = data["sessionId"]
-    
+    section = data["section"]
+    prompt = data["instruction"]
+    sector = proposal_gpt.edit_web_json(section,prompt)
     # Convert the JSON response to a JSON-serializable format    
     # Return the JSON response
     #return jsonify(json_response)
+    return jsonify(sector)
 
 if __name__ == '__main__':
    app.run()
