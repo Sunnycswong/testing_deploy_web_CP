@@ -370,11 +370,11 @@ json.dump(schema_dict_list_with_GPT, open("GOGOVAN_schema_with_extraction_GPT.js
 
 #%%
 
-def create_docx():
+def create_docx(json_data):
 
     # Load the JSON data
-    with open('testing_schema.json', 'r') as json_file:
-        json_data = json.load(json_file)
+    #with open('testing_schema.json', 'r') as json_file:
+    #    json_data = json.load(json_file)
 
     # Create a new Word document
     document = Document()

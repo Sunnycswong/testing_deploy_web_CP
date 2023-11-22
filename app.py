@@ -73,6 +73,9 @@ def extract_rm_notes():
     # Return the JSON response
     return jsonify(first_RM_version)
 
+
+# return the sector regen
+# accept the json like this {"section": 'Client Background',"instruction":"Gogovan is requesting a credit facility of $60 million instead of $10 million"}
 @app.route('/regen', methods=['POST'])
 def regen():
 
@@ -83,8 +86,39 @@ def regen():
     sector = proposal_gpt.edit_web_json(section, prompt)
     # Convert the JSON response to a JSON-serializable format    
     # Return the JSON response
-    #return jsonify(json_response)
     return jsonify(sector)
+
+
+# return the docx document 
+# accept json like this:
+"""[
+    {
+        "Section": "Project Overview",
+        "Component": [
+            "Project Name",
+            "Project Description",
+            "Project Cost"
+        ],
+        "Prompt": "Write me an overview on the project based on the provided component",
+        "Example": "The deal is referred by Pamfleet Group (\u201cPamfleet\u201d) and our relationship with it can be traced back to early 2006 when the OIC was with Hang Seng Bank.  After joining ICBC (Asia), OIC\u2019d tried a couple of time to cooperate with Pamfleet, but was in vain owing to the more aggressive offer given by Pamfleet\u2019s partner banks, like CITIC Ka Wah Bank.  However, due to ICBCA business scale, network plus OIC\u2019s marketing effort and cordial relationship, Pamfleet agreed to provide an industry / office acquisition project for our consideration.\n\nIn this project, Pamfleet is to cooperate with Angelo Gordon Group (\u201cAngelo Gordon\u201d), a US investment company dedicated to alternative investment to form a fund, which will be used to acquire Ever Gain Plaza located in Kwai Chung (the \u201cProperty\u201d) or the companies holding the Property.",
+        "RM Note": "- Client Name: Gogovan\n- Project Name: The company/project name mentioned in the RM note is Gogovan.\n- Project Description: The project description for Gogovan is to support its expansion plans, technology investments, and working capital needs. The company aims to enter new markets, both domestically and internationally, to capture additional customer segments and increase market share. Gogovan also plans to invest in technology and infrastructure improvements to streamline operations, optimize delivery routes, and enhance overall efficiency. The proposed credit facility of $10 million will enable Gogovan to execute its growth strategy and maintain its competitive edge in the logistics and delivery industry.\n- Project Cost: The project cost for Gogovan's expansion plans, technology investments, and working capital needs is not mentioned in the RM note.\n",
+        "Document": "",
+        "GPT Output": "the client for this project is Gogovan, a company in the logistics and delivery industry. The project aims to support Gogovan's expansion plans, technology investments, and working capital needs. Gogovan intends to enter new markets, both domestically and internationally, in order to capture additional customer segments and increase its market share.\n\nTo achieve this, Gogovan plans to invest in technology and infrastructure improvements. These investments will help streamline operations, optimize delivery routes, and enhance overall efficiency. However, the specific project cost for Gogovan's expansion plans, technology investments, and working capital needs is not mentioned in the provided information.\n\nThe proposed credit facility of $10 million will enable Gogovan to execute its growth strategy and maintain its competitive edge in the logistics and delivery industry. This credit facility will provide the necessary financial support for Gogovan's expansion plans and technology investments.\n\nOverall, the project for Gogovan focuses on expanding its market presence, improving operational efficiency through technology investments, and securing the necessary working capital to support its growth strategy.",
+        "Component_Text": "Project Name, Project Description, Project Cost"
+    },
+                     .... ]"""
+@app.route('/docx', methods=['POST'])
+def docx():
+
+    data = request.get_json()
+    logging.info("API request param:", data)
+    json_data = data["json_data"]
+
+    proposal_gpt.create_docx(json_data)
+
+    return 
+
+
 
 if __name__ == '__main__':
    app.run()
