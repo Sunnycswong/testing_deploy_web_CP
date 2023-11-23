@@ -1,0 +1,403 @@
+#%%
+## Import Library
+import copy
+import openai
+from azure.core.credentials import AzureKeyCredential
+from azure.identity import AzureDeveloperCliCredential
+from azure.search.documents import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import (
+    HnswParameters,
+    PrioritizedFields,
+    SearchableField,
+    SearchField,
+    SearchFieldDataType,
+    SearchIndex,
+    SemanticConfiguration,
+    SemanticField,
+    SemanticSettings,
+    SimpleField,
+    VectorSearch,
+    VectorSearchAlgorithmConfiguration,
+)
+from azure.storage.blob import BlobServiceClient
+from langchain.chains import LLMChain
+from langchain.llms import AzureOpenAI 
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
+from langchain.chat_models import AzureChatOpenAI
+from langchain.memory import CosmosDBChatMessageHistory
+import openai
+import os
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores.azuresearch import AzureSearch
+
+import openai
+import os
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores.azuresearch import AzureSearch
+
+from azure.storage.blob import BlobServiceClient
+from azure.core.exceptions import ResourceExistsError
+import json
+
+from langchain.chains import RetrievalQA
+from langchain.chains.question_answering import load_qa_chain
+#from langchain.retrievers import AzureCognitiveSearchRetriever
+from langdetect import detect
+from langchain.prompts import PromptTemplate
+import re
+# Create chain to answer questions
+from langchain.chains import RetrievalQA
+from langchain.chains.question_answering import load_qa_chain
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+from langchain.chains import ConversationalRetrievalChain
+
+# Import Azure OpenAI
+from langchain.llms import AzureOpenAI 
+from langchain.chat_models import AzureChatOpenAI
+from langchain.schema import HumanMessage
+
+import openai
+from azure.core.credentials import AzureKeyCredential
+from azure.identity import AzureDeveloperCliCredential
+from azure.search.documents import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import (
+    HnswParameters,
+    PrioritizedFields,
+    SearchableField,
+    SearchField,
+    SearchFieldDataType,
+    SearchIndex,
+    SemanticConfiguration,
+    SemanticField,
+    SemanticSettings,
+    SimpleField,
+    VectorSearch,
+    VectorSearchAlgorithmConfiguration,
+)
+
+from azure.storage.blob import BlobServiceClient
+from pypdf import PdfReader
+from langchain.schema import Document
+import openai
+import os
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores.azuresearch import AzureSearch
+#import textwrap
+import logging
+from azure.storage.blob import BlobServiceClient
+from azure.core.exceptions import ResourceExistsError
+import json
+
+
+def load_json(json_path):
+    with open(json_path, "r" ,encoding="utf-8") as f:
+        data = json.load(f)
+    return data
+
+
+#%%
+raw_prompt_temp = [
+    {
+        "Section": "Executive Summary",
+        "Sub-section": "EXECUTIVE SUMMARY",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the EXECUTIVE SUMMARY",
+        "Example": "The deal is referred by Pamfleet Group (“Pamfleet”) and our relationship with it can be traced back to early 2006 when the OIC was with Hang Seng Bank.  After joining ICBC (Asia), OIC’d tried a couple of time to cooperate with Pamfleet, but was in vain owing to the more aggressive offer given by Pamfleet’s partner banks, like CITIC Ka Wah Bank.  However, due to ICBCA business scale, network plus OIC’s marketing effort and cordial relationship, Pamfleet agreed to provide an industry / office acquisition project for our consideration. In this project, Pamfleet is to cooperate with Angelo Gordon Group (“Angelo Gordon”), a US investment company dedicated to alternative investment to form a fund, which will be used to acquire Ever Gain Plaza located in Kwai Chung (the “Property”) or the companies holding the Property."
+    },
+    {
+        "Section": "Executive Summary",
+        "Sub-section": "Overview of the Proposal",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Overview of the Proposal",
+        "Example": "Introduction of the deal brought by Pamfleet Group and the aim to form a fund with Angelo Gordon Group for the acquisition of Ever Gain Plaza or the companies holding the Property."
+    },
+    {
+        "Section": "Client Request",
+        "Sub-section": "Purpose of the Loan",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Purpose of the Loan",
+        "Example": "Acquisition of the majority of Ever Gain Plaza by Pamfleet and Angelo Gordon."
+    },
+    {
+        "Section": "Client Request",
+        "Sub-section": "Amount Requested",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Amount Requested",
+        "Example": "Term Loan Facility of HKD757.5M for acquisition. IRS Facility of HKD757.5M (notional) for hedging the interest rate risk of the Facility."
+    },
+    {
+        "Section": "Client Request",
+        "Sub-section": "Terms and Conditions Requested",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Terms and Conditions Requested",
+        "Example": "First Legal Charge on the Property plus other terms customary to this type of financing (detailed in the Annex). The requirement that the Facility A + mezzanine loans should not exceed 70% of the prevailing Market Value of the Property. The need for additional securities or a reduction of the aggregate outstanding if the above condition is exceeded, to return the LTV ratio to 60% or below within 45 days. The condition that All Monies First Legal Mortgage on the Property is only for the Bank, with other lenders only getting a Second Legal Mortgage."
+    },
+    {
+        "Section": "Shareholders and Group Structure",
+        "Sub-section": "List of Shareholders",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the List of Shareholders",
+        "Example": "XYZ Corporation is owned by a diverse group of shareholders. The largest shareholder is John Doe, who holds a 40% stake in the company. Jane Smith and Robert Johnson are also significant shareholders, each holding a 30% stake. The remaining shares are distributed among various minor shareholders, who collectively hold a 30% stake in the company."
+    },
+    {
+        "Section": "Shareholders and Group Structure",
+        "Sub-section": "Ownership Structure",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Ownership Structure",
+        "Example": "The ownership structure of XYZ Corporation is hierarchical. John Doe, as the majority shareholder, holds the position of Chairman of the Board. Jane Smith, despite having the same amount of shares as Robert Johnson, serves as the Chief Executive Officer due to her extensive experience and knowledge in the industry. Robert Johnson, with his considerable financial expertise, functions as the Chief Financial Officer. This structure ensures that all major shareholders have significant influence over the company's strategic decisions."
+    },
+    {
+        "Section": "Shareholders and Group Structure",
+        "Sub-section": "Group Companies (if any)",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Group Companies (if any)",
+        "Example": "XYZ Corporation has expanded its business operations through several subsidiaries. ABC Manufacturing is a subsidiary that specializes in the production of automotive parts. DEF Logistics is another subsidiary that provides transportation and logistics services. Finally, GHI Technologies is a start-up under XYZ Corporation that focuses on developing cutting-edge artificial intelligence solutions. Despite operating independently, these subsidiaries align their strategies with the overall direction set by XYZ Corporation, creating a synergistic group structure."
+    },
+    {
+        "Section": "Project Details",
+        "Sub-section": "Project Summary",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Project Summary",
+        "Example": "The Property comprises the majority portion of Ever Gain Plaza. This portion is approximately 582,335 square feet, or 60% of the industrial office floor area (7/F–28/F). The Property also includes 187 car parking bays on the Lower Ground Floor, Ground Floor, 1st Floor and 2nd Floor. With its distinctive architectural design and energy-efficient curtain wall system, Ever Gain Plaza is a landmark industrial office building in the Kwai Chung area. Completed in 1998, Ever Gain Plaza offers easy access to Hong Kong’s major container terminals, as well as to rail and major road networks. The building comprises two towers atop a 7-storey podium and a lower ground floor. Each tower consists of 22 floors, affording a total gross floor area of over 900,000 square feet of industrial office space. Ever Gain Plaza was built to provide its users with convenient facilities including a food court and ample parking spaces. There are a total of 30 lifts, 8 for cargo and 22 for passengers, providing efficient vertical transportation in the building."
+    },
+    {
+        "Section": "Project Details",
+        "Sub-section": "Strengths of the Project ",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Strengths of the Project ",
+        "Example": "A landmark industrial office building in Kwai Chung strategically positioned within 8 minutes by car to Hong Kong’s major container terminals and 15 minutes to the Hong Kong International Airport, the Central business district, and the border with mainland China. Ever Gain Plaza is within 5 minutes walking distance to the Kwai Fong MTR (subway) station. High quality building specifications and facilities - considered to be a benchmark property in the area. Key tenants in the building are predominantly major corporate industrial office occupiers such as NTT Asia, Arrow Asia, Jardine Shipping and NEC Technologies. High occupancy rate of approximately 90% is supported by strong tenant covenants."
+    },
+    {
+        "Section": "Industrial Section Analysis",
+        "Sub-section": "Overview of the Industry",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Overview of the Industry, like what it encompasses, its size, key characteristics, and the major players. It may also include information about the industry's history, its current state, and any notable changes or developments.",
+        "Example": "The industrial office category comprises floor space in developments within industrial-zoned districts with planning permission for industrial office use and certified for such occupation. The stock is distributed in 11 districts throughout Hong Kong with the majority of the floor space in the Kwun Tong, Cheung Sha Wan and Kwai Chung areas. The activities permitted in industrial office buildings are industrial and industrial-related. However, there is no restriction on the size of an office to be established within an industrial building, as long as it is directly related to an industrial operation. Trading firms requiring large storage areas and involving frequent loading and unloading are also suitable for locating in industrial office buildings on the basis of operational requirements which commercial buildings could not satisfy. In view of this, trading firms with a minimum of 30% of usable floor area used for storage are allowed in industrial office buildings within industrial zoning as of right. The industrial/office sector generally follows the peaks and troughs of the real estate cycle while being less volatile than Grade A office and less affected by any unforeseen market events."
+    },
+    {
+        "Section": "Industrial Section Analysis",
+        "Sub-section": "Key Trends in the Industry",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the the current and expected trends in the industry. These could include changes in technology, customer behavior, regulations, or market conditions that are influencing the industry's direction. It's an opportunity to highlight what's driving growth or creating challenges in the industry.",
+        "Example": "Per CBRE Research, the rents and capital values of a number of I/O buildings located in Kowloon Bay, Kwun Tong, San Po Kong, Cheung Sha Wan, Kwai Chung and Shatin showed growth after having lagged behind the strong rebound from Q2 2009 in newly completed Grade-A office buildings in decentralized districts. The industrial office submarket is showing growth after having lagged behind the strong rebound from the second quarter of 2009 in newly completed Grade A office buildings decentralized districts. In the first quarter of 2012, industrial office rentals were 7.3% higher quarter-on-quarter, compared to a quarter-on-quarter increase of 5.6% in the third quarter of 2011, averaging HK$13.9 per square foot. Capital values increased 1.6% quarter-on-quarter over the fourth quarter of 2011 to an average of HK$3,580 per sq.ft. Compared to the same period last year, values averaged over 10% growth. CBRE Research projects a very positive outlook for future rental growth for overall Kowloon and the Western Corridor, and this will have a directive positive impact on Ever Gain Plaza. It is of the opinion that the rental growth forecast for Ever Gain Plaza will be supported due to the limited future supply until 2015+, decreasing vacancy rates in the area, and the continuing trend of decentralization."
+    },
+    {
+        "Section": "Industrial Section Analysis",
+        "Sub-section": "Competitive Landscape",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the an analysis of the competition within the industry. It may include a discussion of the major players, their strategies, market share, strengths and weaknesses. This could also involve a SWOT (Strengths, Weaknesses, Opportunities, Threats) analysis, Porter's Five Forces analysis, or other strategic tools to assess competitive dynamics.",
+        "Example": "Kwai Chung, including Kwai Fong, Kwai Hing and Tsuen Wan, is becoming increasingly commercially oriented and is popular for office, light industrial, logistics operations and data centre users. Kwai Chung has been transforming from a traditional industrial district into a secondary office hub. The area is gradually being repositioned as a logistics and data centre hub due to its strategic location near Hong Kong’s major container ports and Hong Kong International Airport.The Kwai Chung office market had a supply spike in 2006 and mid-2008, due to the completion of Nina Tower and Kowloon Commerce Centre Tower 1. This supply offered a critical mass of Grade-A office space. With an increasing number of multi-national corporations and major occupiers attracted to the area, the vacancy rate has dropped significantly. The improvement in vacancy rates has also led to upward rental pressure in these decentralized locations, and this is set to continue due to attractive demand/supply dynamics in the submarket.The office vacancy of Kwai Chung district is 1.3% as at April 2012 which is a 1.9% reduction from April 2011, compared to a 1.7% reduction for overall Kowloon and New Territories. This trend is set to continue due to steady demand and limited supply."
+    },
+    {
+        "Section": "Industrial Section Analysis",
+        "Sub-section": "Opportunities and Threats",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the the potential opportunities and threats within the industry. Opportunities could be untapped markets, technological advancements, or regulatory changes that could benefit the industry. Threats might include increasing competition, negative market trends, or potential regulatory obstacles.",
+        "Example": "Despite the relatively slow external trade environment during early 2012, sentiment in the industrial market remained positive. This came on the back of improved domestic consumption and robust retail sales supported by mainland visitors, which translated into leasing demand for logistic centres and warehouse storage space. In the factories and industrial/office leasing market, demand continued to be driven by cost conscious tenants who were attracted by cheaper rents. The market also witnessed more relocation demand from occupiers impacted by industrial revitalization or redevelopment plans of not only storage facilities, but also factory and industrial/office buildings. This pushed the existing tenants to other industrial facilities where vacant space is available. On the supply front, the market witnessed the completion and official opening of Interlink, Goodman’s latest storage facility in Tsing Yi. It is the fourth biggest warehouse in Hong Kong, and is the largest development over the past decade with around 2.4 million sq ft. On the back of a prolonged shortage of prime new supply in the market, space in the development was quickly absorbed and the facility was almost fully leased out prior to completion."
+    },
+    {
+        "Section": "Management",
+        "Sub-section": "Management Team Composition",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Management Team Composition",
+        "Example": "a) Key persons under Angelo Gordon Wilson Leung Ken Ng, Managing Director and Head of China Real Estate Zoe Zuo, Vice President b) Key persons under Pamfleet Andrew Moore, Principal and Chief Executive Officer Kelvin Wong, Principal and Director"
+    },
+    {
+        "Section": "Management",
+        "Sub-section": "Background of Key Management Personnel",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Background of Key Management Personnel",
+        "Example": "a) Key persons under Angelo Gordon. Wilson Leung is based in Hong Kong and is the head of Angelo, Gordon’s Asian real estate activities. Before joining the firm in 2002, Wilson was a management consultant for Bain & Company, a strategy consulting firm in San Francisco. He managed a small real estate portfolio for a non-profit institution prior to that. He received a B.S. degree from Cornell University. Wilson is fluent in Mandarin, Cantonese and English. Ken Ng is the Managing Director and Head of China Real Estate, focusing on the real estate investment in Hong Kong and the PRC. Zoe Zuo is the Vice President, focusing on the real estate investment in Hong Kong and the PRC. b) Key persons under Pamfleet Andrew Moore is the Principal and Chief Executive Officer. Kelvin Wong is the Principal and Director."
+    },
+    {
+        "Section": "Financial Information of the Borrower",
+        "Sub-section": "Financial Statements",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Financial Statements",
+        "Example": "Financial statements are crucial documents that provide an overview of a company's financial health and performance. They include the balance sheet, income statement, and cash flow statement.  For example, ABC Company's financial statements for the fiscal year 2023 showed a strong financial position. The balance sheet exhibited a healthy increase in assets relative to liabilities, with total assets reaching $5 million, up 20% from the previous year. The income statement highlighted a robust net profit margin of 15%, indicating efficient operations. The cash flow statement revealed a positive cash flow from operating activities, suggesting that the company's core business operations are profitable."
+    },
+    {
+        "Section": "Financial Information of the Borrower",
+        "Sub-section": "Projections",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Projections",
+        "Example": "Projections are forward-looking estimates that give an idea of a company's future financial performance based on current data and assumptions. For instance, ABC Company's projections for the fiscal year 2024 are optimistic. Based on current growth trends and market conditions, the company expects revenue to increase by 10% to $11 million. Net income is forecasted to grow by 8%, reflecting anticipated efficiency gains in operations. The company also projects a 5% increase in cash flow from operating activities, indicating strong future liquidity."
+    },
+    {
+        "Section": "Financial Information of the Borrower",
+        "Sub-section": "Key Financial Ratios",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Key Financial Ratios",
+        "Example": "Key financial ratios help to analyze a company's financial performance in various aspects like profitability, liquidity, solvency, and efficiency. Using ABC Company as an example, some of the key financial ratios include return on equity (ROE), current ratio, and debt-to-equity ratio. The ROE of ABC Company was 12% in 2023, showing a good return on the money invested by shareholders. The current ratio, which measures the company's ability to cover its short-term liabilities, stood at 1.5, suggesting adequate liquidity. The debt-to-equity ratio was 0.4, indicating a balanced approach to financing its operations with a mix of debt and equity. "
+    },
+    {
+        "Section": "Financial Information of the Borrower",
+        "Sub-section": "Credit History",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Credit History",
+        "Example": "Credit history reflects a company's ability to meet its financial obligations and is often used by lenders to assess creditworthiness. For example, ABC Company has maintained an excellent credit history over the past five years. The company has consistently met its debt obligations on time, and it has a credit score of AA from a leading credit rating agency. This strong credit history enhances ABC Company's reputation with lenders and investors, and it should help secure favorable terms for any future borrowing."
+    },
+    {
+        "Section": "Other Banking Facilities",
+        "Sub-section": "Existing Loans",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Existing Loans",
+        "Example": "Currently, the company has an existing loan with ABC Bank, which was obtained in 2018 for the purpose of financing a machinery purchase. The loan amount is $500,000, and it has a fixed interest rate of 4% per annum. The repayment term is set at 5 years, with monthly installments. As part of the company's expansion plans in 2020, a loan was secured from XYZ Bank. The loan amount of $1,000,000 was utilized for the construction of a new production facility. The loan carries a variable interest rate of 5% based on the prevailing market rates and has a repayment term of 7 years."
+    },
+    {
+        "Section": "Other Banking Facilities",
+        "Sub-section": "Current Bank Relationships",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Current Bank Relationships",
+        "Example": "The company maintains a strong relationship with ABC Bank, which has been the primary banking partner for several years. ABC Bank provides a range of financial services, including working capital facilities, foreign exchange transactions, and cash management solutions. The company appreciates the personalized service and competitive interest rates offered by ABC Bank. In addition to ABC Bank, the company has recently established a banking relationship with XYZ Bank. XYZ Bank offers specialized lending solutions tailored to the company's industry and has shown a keen understanding of their business needs. The company values XYZ Bank's expertise and innovative financial products."
+    },
+    {
+        "Section": "Opinion of the Relationship Manager",
+        "Sub-section": "Weaknesses",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Weaknesses",
+        "Example": "No consolidated financial information of the 2 sponsors, namely Pamfleet and Angelo Gordon for full assessment of their financial strengths. This is a non-recourse deal. However, a sinking fund arrangement will be set up with the upcoming 3-month principal and interest repayments put into the bank account with ICBCA."
+    },
+    {
+        "Section": "Opinion of the Relationship Manager",
+        "Sub-section": "Strengths",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Strengths",
+        "Example": "From the projected cashflow and the LTV of the Property, we consider that this is a bankable deal in view of: 1. Pamfleet and Angelo Gordon are experienced property investment companies with satisfactory track record. 2. Acceptable LTV at around 38% (not including IRS for hedging) with maximum LTV not exceeding 50%. 3. Satisfactory cashflow projection for servicing the Facility. 4. Low breakeven price at around HKD1,300 per sq ft (vis-à-vis the market price at around HKD3.2-3.6K per sq ft). 5. Valuable account with projected income of HKD24.4M and RAROC at around 24.09%, especially in view of the low administrative works involved."
+    },
+    {
+        "Section": "Opinion of the Relationship Manager",
+        "Sub-section": "Assessment of the Project",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Assessment of the Project",
+        "Example": "The weaknesses of the project include the lack of consolidated financial information of the sponsors and the non-recourse nature of the deal. However, a sinking fund arrangement will be established to handle principal and interest repayments. On the other hand, the project exhibits several strengths. Pamfleet and Angelo Gordon are experienced property investment companies with a satisfactory track record. The loan-to-value ratio (LTV) is acceptable at around 38%, and the projected cashflow supports servicing the facility. Additionally, the breakeven price is low compared to the market price, and the projected income from the valuable account is promising with a favorable risk-adjusted return on capital (RAROC). Considering the strengths and weaknesses, the project is deemed bankable and has the potential for success."
+    },
+    {
+        "Section": "Summary of Recommendation",
+        "Sub-section": "Risks and Mitigation",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Risks and Mitigation",
+        "Example": "In assessing the credit proposal, it is essential to identify and evaluate the potential risks associated with the borrower and the project. One of the key risks is the borrower's exposure to foreign exchange fluctuations due to their international operations. To mitigate this risk, the borrower has implemented a hedging strategy, utilizing forward contracts to lock in exchange rates for a portion of their foreign currency transactions. This strategy provides stability and minimizes the impact of adverse currency movements on their profitability. Another risk is the borrower's heavy reliance on a single key customer, which poses a concentration risk. To address this, the borrower is actively diversifying their customer base by targeting new markets and industries, thereby reducing their dependency on a single client. Additionally, the borrower has established long-term contracts with key customers to secure recurring revenue streams and maintain stable cash flows. These risk mitigation measures enhance the borrower's ability to withstand potential challenges and ensure the sustainability of their business."
+    },
+    {
+        "Section": "Summary of Recommendation",
+        "Sub-section": "Key Considerations",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Key Considerations",
+        "Example": "When evaluating the credit proposal, several key considerations should be taken into account to assess the borrower's creditworthiness and the viability of the project. Firstly, the borrower's financial performance and stability are crucial indicators of their ability to meet their financial obligations. A thorough analysis of the borrower's financial statements, including income statements, balance sheets, and cash flow statements, reveals consistent revenue growth, healthy profitability margins, and strong cash flow generation. Furthermore, the borrower's strong capital structure, with a favorable debt-to-equity ratio, indicates a solid financial foundation. Secondly, an evaluation of the industry dynamics and competitive landscape is necessary to understand the borrower's positioning and growth potential. Despite the competitive market, the borrower has a unique value proposition, differentiated product offerings, and a strong market share. Their innovative marketing strategies and investment in research and development further strengthen their competitive advantage. Lastly, the borrower's management team plays a crucial role in driving the company's success. The team possesses extensive industry experience, a proven track record of executing successful projects, and a clear strategic vision. Taking these key considerations into account provides confidence in the borrower's ability to repay the credit facility and achieve their growth objectives."
+    },
+    {
+        "Section": "Summary of Recommendation",
+        "Sub-section": "Proposed Terms and Conditions",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Proposed Terms and Conditions",
+        "Example": "The proposed terms and conditions for the credit facility have been carefully structured to align with the borrower's needs while ensuring the lender's interests are adequately protected. The facility will have a tenor of seven years, providing the borrower with a suitable repayment period that matches the project's cash flow generation. The interest rate will be variable, based on a spread above the prevailing LIBOR rate, allowing for potential adjustments in market interest rates. The principal repayment will be structured with equal quarterly installments to ensure a manageable repayment schedule for the borrower. Additionally, the facility will be secured by a first-ranking charge over the borrower's tangible assets, including properties, machinery, and inventory. Financial covenants will include maintaining a minimum debt service coverage ratio of 1.25 and a maximum leverage ratio of 4.0. These proposed terms and conditions strike a balance between providing the borrower with the necessary financial flexibility and ensuring the lender's security and risk mitigation."
+    },
+    {
+        "Section": "Summary of Recommendation",
+        "Sub-section": "Reasons for Recommendation",
+        "Breakdown": "",
+        "Value": "",
+        "Question": "Please extract the Reasons for Recommendation",
+        "Example": "After a comprehensive evaluation of the credit proposal, it is recommended to approve the facility for the following reasons. Firstly, the borrower demonstrates a strong financial position, supported by consistent revenue growth, healthy profitability margins, and robust cash flow generation. Their solid capital structure and prudent financial management provide assurance of their ability to meet their financial obligations. Secondly, the borrower operates in a dynamic industry and has successfully carved out a niche market with their unique value proposition and differentiated product offerings. Their strong market share, innovative marketing strategies, and ongoing investments in research and development position them for continued growth and market leadership. Additionally, the proposed terms and conditions of the credit facility are structured to provide the borrower with the necessary financial flexibility while ensuring the lender's security. The collateral and financial covenants offer adequate protection and align with industry standards. Overall, approving the credit facility will enable the borrower to capitalize on market opportunities, invest in further expansion, and contribute to their long-term success."
+    }
+]
+
+
+# loop and add id to schema
+for i in range(len(raw_prompt_temp)):
+    raw_prompt_temp[i]["ID"] = i
+
+#%%
+# Create a Clear temp of schema 
+Blank_prompt_temp = copy.deepcopy(raw_prompt_temp)
+
+for i in range(len(Blank_prompt_temp)):
+    Blank_prompt_temp[i]["Value"] = ""
+
+json.dump(Blank_prompt_temp, open("hierarchy_v2.json", "w"), indent=4)
+
+
+
+#%%
+#one off exercise 
+##This cell is to generate the schema of displaying in the frondend
+default_text = ''
+
+section_prompt_dict = {'Executive Summary': "", 'Client Request': "", 'Shareholders and Group Structure': "", 'Project Details': "", 'Industrial Section Analysis': "", 'Management': "", 'Financial Information of the Borrower': "", 'Other Banking Facilities': "", 'Opinion of the Relationship Manager': "", 'Summary of Recommendation': ""}
+
+credit_proposal_example_dict ={'Executive Summary': 'The deal is referred by Pamfleet Group (“Pamfleet”) and our relationship with it can be traced back to early 2006 when the OIC was with Hang Seng Bank.  After joining ICBC (Asia), OIC’d tried a couple of time to cooperate with Pamfleet, but was in vain owing to the more aggressive offer given by Pamfleet’s partner banks, like CITIC Ka Wah Bank.  However, due to ICBCA business scale, network plus OIC’s marketing effort and cordial relationship, Pamfleet agreed to provide an industry / office acquisition project for our consideration. In this project, Pamfleet is to cooperate with Angelo Gordon Group (“Angelo Gordon”), a US investment company dedicated to alternative investment to form a fund, which will be used to acquire Ever Gain Plaza located in Kwai Chung (the “Property”) or the companies holding the Property.\nIntroduction of the deal brought by Pamfleet Group and the aim to form a fund with Angelo Gordon Group for the acquisition of Ever Gain Plaza or the companies holding the Property.\n',
+ 'Client Request': 'Acquisition of the majority of Ever Gain Plaza by Pamfleet and Angelo Gordon.\nTerm Loan Facility of HKD757.5M for acquisition. IRS Facility of HKD757.5M (notional) for hedging the interest rate risk of the Facility.\nFirst Legal Charge on the Property plus other terms customary to this type of financing (detailed in the Annex). The requirement that the Facility A + mezzanine loans should not exceed 70% of the prevailing Market Value of the Property. The need for additional securities or a reduction of the aggregate outstanding if the above condition is exceeded, to return the LTV ratio to 60% or below within 45 days. The condition that All Monies First Legal Mortgage on the Property is only for the Bank, with other lenders only getting a Second Legal Mortgage.\n',
+ 'Shareholders and Group Structure': "XYZ Corporation is owned by a diverse group of shareholders. The largest shareholder is John Doe, who holds a 40% stake in the company. Jane Smith and Robert Johnson are also significant shareholders, each holding a 30% stake. The remaining shares are distributed among various minor shareholders, who collectively hold a 30% stake in the company.\nThe ownership structure of XYZ Corporation is hierarchical. John Doe, as the majority shareholder, holds the position of Chairman of the Board. Jane Smith, despite having the same amount of shares as Robert Johnson, serves as the Chief Executive Officer due to her extensive experience and knowledge in the industry. Robert Johnson, with his considerable financial expertise, functions as the Chief Financial Officer. This structure ensures that all major shareholders have significant influence over the company's strategic decisions.\nXYZ Corporation has expanded its business operations through several subsidiaries. ABC Manufacturing is a subsidiary that specializes in the production of automotive parts. DEF Logistics is another subsidiary that provides transportation and logistics services. Finally, GHI Technologies is a start-up under XYZ Corporation that focuses on developing cutting-edge artificial intelligence solutions. Despite operating independently, these subsidiaries align their strategies with the overall direction set by XYZ Corporation, creating a synergistic group structure.\n",
+ 'Project Details': 'The Property comprises the majority portion of Ever Gain Plaza. This portion is approximately 582,335 square feet, or 60% of the industrial office floor area (7/F–28/F). The Property also includes 187 car parking bays on the Lower Ground Floor, Ground Floor, 1st Floor and 2nd Floor. With its distinctive architectural design and energy-efficient curtain wall system, Ever Gain Plaza is a landmark industrial office building in the Kwai Chung area. Completed in 1998, Ever Gain Plaza offers easy access to Hong Kong’s major container terminals, as well as to rail and major road networks. The building comprises two towers atop a 7-storey podium and a lower ground floor. Each tower consists of 22 floors, affording a total gross floor area of over 900,000 square feet of industrial office space. Ever Gain Plaza was built to provide its users with convenient facilities including a food court and ample parking spaces. There are a total of 30 lifts, 8 for cargo and 22 for passengers, providing efficient vertical transportation in the building.\nA landmark industrial office building in Kwai Chung strategically positioned within 8 minutes by car to Hong Kong’s major container terminals and 15 minutes to the Hong Kong International Airport, the Central business district, and the border with mainland China. Ever Gain Plaza is within 5 minutes walking distance to the Kwai Fong MTR (subway) station. High quality building specifications and facilities - considered to be a benchmark property in the area. Key tenants in the building are predominantly major corporate industrial office occupiers such as NTT Asia, Arrow Asia, Jardine Shipping and NEC Technologies. High occupancy rate of approximately 90% is supported by strong tenant covenants.\n',
+ 'Industrial Section Analysis': 'The industrial office category comprises floor space in developments within industrial-zoned districts with planning permission for industrial office use and certified for such occupation. The stock is distributed in 11 districts throughout Hong Kong with the majority of the floor space in the Kwun Tong, Cheung Sha Wan and Kwai Chung areas. The activities permitted in industrial office buildings are industrial and industrial-related. However, there is no restriction on the size of an office to be established within an industrial building, as long as it is directly related to an industrial operation. Trading firms requiring large storage areas and involving frequent loading and unloading are also suitable for locating in industrial office buildings on the basis of operational requirements which commercial buildings could not satisfy. In view of this, trading firms with a minimum of 30% of usable floor area used for storage are allowed in industrial office buildings within industrial zoning as of right. The industrial/office sector generally follows the peaks and troughs of the real estate cycle while being less volatile than Grade A office and less affected by any unforeseen market events.\nPer CBRE Research, the rents and capital values of a number of I/O buildings located in Kowloon Bay, Kwun Tong, San Po Kong, Cheung Sha Wan, Kwai Chung and Shatin showed growth after having lagged behind the strong rebound from Q2 2009 in newly completed Grade-A office buildings in decentralized districts. The industrial office submarket is showing growth after having lagged behind the strong rebound from the second quarter of 2009 in newly completed Grade A office buildings decentralized districts. In the first quarter of 2012, industrial office rentals were 7.3% higher quarter-on-quarter, compared to a quarter-on-quarter increase of 5.6% in the third quarter of 2011, averaging HK$13.9 per square foot. Capital values increased 1.6% quarter-on-quarter over the fourth quarter of 2011 to an average of HK$3,580 per sq.ft. Compared to the same period last year, values averaged over 10% growth. CBRE Research projects a very positive outlook for future rental growth for overall Kowloon and the Western Corridor, and this will have a directive positive impact on Ever Gain Plaza. It is of the opinion that the rental growth forecast for Ever Gain Plaza will be supported due to the limited future supply until 2015+, decreasing vacancy rates in the area, and the continuing trend of decentralization.\nKwai Chung, including Kwai Fong, Kwai Hing and Tsuen Wan, is becoming increasingly commercially oriented and is popular for office, light industrial, logistics operations and data centre users. Kwai Chung has been transforming from a traditional industrial district into a secondary office hub. The area is gradually being repositioned as a logistics and data centre hub due to its strategic location near Hong Kong’s major container ports and Hong Kong International Airport.The Kwai Chung office market had a supply spike in 2006 and mid-2008, due to the completion of Nina Tower and Kowloon Commerce Centre Tower 1. This supply offered a critical mass of Grade-A office space. With an increasing number of multi-national corporations and major occupiers attracted to the area, the vacancy rate has dropped significantly. The improvement in vacancy rates has also led to upward rental pressure in these decentralized locations, and this is set to continue due to attractive demand/supply dynamics in the submarket.The office vacancy of Kwai Chung district is 1.3% as at April 2012 which is a 1.9% reduction from April 2011, compared to a 1.7% reduction for overall Kowloon and New Territories. This trend is set to continue due to steady demand and limited supply.\nDespite the relatively slow external trade environment during early 2012, sentiment in the industrial market remained positive. This came on the back of improved domestic consumption and robust retail sales supported by mainland visitors, which translated into leasing demand for logistic centres and warehouse storage space. In the factories and industrial/office leasing market, demand continued to be driven by cost conscious tenants who were attracted by cheaper rents. The market also witnessed more relocation demand from occupiers impacted by industrial revitalization or redevelopment plans of not only storage facilities, but also factory and industrial/office buildings. This pushed the existing tenants to other industrial facilities where vacant space is available. On the supply front, the market witnessed the completion and official opening of Interlink, Goodman’s latest storage facility in Tsing Yi. It is the fourth biggest warehouse in Hong Kong, and is the largest development over the past decade with around 2.4 million sq ft. On the back of a prolonged shortage of prime new supply in the market, space in the development was quickly absorbed and the facility was almost fully leased out prior to completion.\n',
+ 'Management': 'a) Key persons under Angelo Gordon Wilson Leung Ken Ng, Managing Director and Head of China Real Estate Zoe Zuo, Vice President b) Key persons under Pamfleet Andrew Moore, Principal and Chief Executive Officer Kelvin Wong, Principal and Director\na) Key persons under Angelo Gordon. Wilson Leung is based in Hong Kong and is the head of Angelo, Gordon’s Asian real estate activities. Before joining the firm in 2002, Wilson was a management consultant for Bain & Company, a strategy consulting firm in San Francisco. He managed a small real estate portfolio for a non-profit institution prior to that. He received a B.S. degree from Cornell University. Wilson is fluent in Mandarin, Cantonese and English. Ken Ng is the Managing Director and Head of China Real Estate, focusing on the real estate investment in Hong Kong and the PRC. Zoe Zuo is the Vice President, focusing on the real estate investment in Hong Kong and the PRC. b) Key persons under Pamfleet Andrew Moore is the Principal and Chief Executive Officer. Kelvin Wong is the Principal and Director.\n',
+ 'Financial Information of the Borrower': "Financial statements are crucial documents that provide an overview of a company's financial health and performance. They include the balance sheet, income statement, and cash flow statement.  For example, ABC Company's financial statements for the fiscal year 2023 showed a strong financial position. The balance sheet exhibited a healthy increase in assets relative to liabilities, with total assets reaching $5 million, up 20% from the previous year. The income statement highlighted a robust net profit margin of 15%, indicating efficient operations. The cash flow statement revealed a positive cash flow from operating activities, suggesting that the company's core business operations are profitable.\nProjections are forward-looking estimates that give an idea of a company's future financial performance based on current data and assumptions. For instance, ABC Company's projections for the fiscal year 2024 are optimistic. Based on current growth trends and market conditions, the company expects revenue to increase by 10% to $11 million. Net income is forecasted to grow by 8%, reflecting anticipated efficiency gains in operations. The company also projects a 5% increase in cash flow from operating activities, indicating strong future liquidity.\nKey financial ratios help to analyze a company's financial performance in various aspects like profitability, liquidity, solvency, and efficiency. Using ABC Company as an example, some of the key financial ratios include return on equity (ROE), current ratio, and debt-to-equity ratio. The ROE of ABC Company was 12% in 2023, showing a good return on the money invested by shareholders. The current ratio, which measures the company's ability to cover its short-term liabilities, stood at 1.5, suggesting adequate liquidity. The debt-to-equity ratio was 0.4, indicating a balanced approach to financing its operations with a mix of debt and equity. \nCredit history reflects a company's ability to meet its financial obligations and is often used by lenders to assess creditworthiness. For example, ABC Company has maintained an excellent credit history over the past five years. The company has consistently met its debt obligations on time, and it has a credit score of AA from a leading credit rating agency. This strong credit history enhances ABC Company's reputation with lenders and investors, and it should help secure favorable terms for any future borrowing.\n",
+ 'Other Banking Facilities': "Currently, the company has an existing loan with ABC Bank, which was obtained in 2018 for the purpose of financing a machinery purchase. The loan amount is $500,000, and it has a fixed interest rate of 4% per annum. The repayment term is set at 5 years, with monthly installments. As part of the company's expansion plans in 2020, a loan was secured from XYZ Bank. The loan amount of $1,000,000 was utilized for the construction of a new production facility. The loan carries a variable interest rate of 5% based on the prevailing market rates and has a repayment term of 7 years.\nThe company maintains a strong relationship with ABC Bank, which has been the primary banking partner for several years. ABC Bank provides a range of financial services, including working capital facilities, foreign exchange transactions, and cash management solutions. The company appreciates the personalized service and competitive interest rates offered by ABC Bank. In addition to ABC Bank, the company has recently established a banking relationship with XYZ Bank. XYZ Bank offers specialized lending solutions tailored to the company's industry and has shown a keen understanding of their business needs. The company values XYZ Bank's expertise and innovative financial products.\n",
+ 'Opinion of the Relationship Manager': 'No consolidated financial information of the 2 sponsors, namely Pamfleet and Angelo Gordon for full assessment of their financial strengths. This is a non-recourse deal. However, a sinking fund arrangement will be set up with the upcoming 3-month principal and interest repayments put into the bank account with ICBCA.\nFrom the projected cashflow and the LTV of the Property, we consider that this is a bankable deal in view of: 1. Pamfleet and Angelo Gordon are experienced property investment companies with satisfactory track record. 2. Acceptable LTV at around 38% (not including IRS for hedging) with maximum LTV not exceeding 50%. 3. Satisfactory cashflow projection for servicing the Facility. 4. Low breakeven price at around HKD1,300 per sq ft (vis-à-vis the market price at around HKD3.2-3.6K per sq ft). 5. Valuable account with projected income of HKD24.4M and RAROC at around 24.09%, especially in view of the low administrative works involved.\nThe weaknesses of the project include the lack of consolidated financial information of the sponsors and the non-recourse nature of the deal. However, a sinking fund arrangement will be established to handle principal and interest repayments. On the other hand, the project exhibits several strengths. Pamfleet and Angelo Gordon are experienced property investment companies with a satisfactory track record. The loan-to-value ratio (LTV) is acceptable at around 38%, and the projected cashflow supports servicing the facility. Additionally, the breakeven price is low compared to the market price, and the projected income from the valuable account is promising with a favorable risk-adjusted return on capital (RAROC). Considering the strengths and weaknesses, the project is deemed bankable and has the potential for success.\n',
+ 'Summary of Recommendation': "In assessing the credit proposal, it is essential to identify and evaluate the potential risks associated with the borrower and the project. One of the key risks is the borrower's exposure to foreign exchange fluctuations due to their international operations. To mitigate this risk, the borrower has implemented a hedging strategy, utilizing forward contracts to lock in exchange rates for a portion of their foreign currency transactions. This strategy provides stability and minimizes the impact of adverse currency movements on their profitability. Another risk is the borrower's heavy reliance on a single key customer, which poses a concentration risk. To address this, the borrower is actively diversifying their customer base by targeting new markets and industries, thereby reducing their dependency on a single client. Additionally, the borrower has established long-term contracts with key customers to secure recurring revenue streams and maintain stable cash flows. These risk mitigation measures enhance the borrower's ability to withstand potential challenges and ensure the sustainability of their business.\nWhen evaluating the credit proposal, several key considerations should be taken into account to assess the borrower's creditworthiness and the viability of the project. Firstly, the borrower's financial performance and stability are crucial indicators of their ability to meet their financial obligations. A thorough analysis of the borrower's financial statements, including income statements, balance sheets, and cash flow statements, reveals consistent revenue growth, healthy profitability margins, and strong cash flow generation. Furthermore, the borrower's strong capital structure, with a favorable debt-to-equity ratio, indicates a solid financial foundation. Secondly, an evaluation of the industry dynamics and competitive landscape is necessary to understand the borrower's positioning and growth potential. Despite the competitive market, the borrower has a unique value proposition, differentiated product offerings, and a strong market share. Their innovative marketing strategies and investment in research and development further strengthen their competitive advantage. Lastly, the borrower's management team plays a crucial role in driving the company's success. The team possesses extensive industry experience, a proven track record of executing successful projects, and a clear strategic vision. Taking these key considerations into account provides confidence in the borrower's ability to repay the credit facility and achieve their growth objectives.\nThe proposed terms and conditions for the credit facility have been carefully structured to align with the borrower's needs while ensuring the lender's interests are adequately protected. The facility will have a tenor of seven years, providing the borrower with a suitable repayment period that matches the project's cash flow generation. The interest rate will be variable, based on a spread above the prevailing LIBOR rate, allowing for potential adjustments in market interest rates. The principal repayment will be structured with equal quarterly installments to ensure a manageable repayment schedule for the borrower. Additionally, the facility will be secured by a first-ranking charge over the borrower's tangible assets, including properties, machinery, and inventory. Financial covenants will include maintaining a minimum debt service coverage ratio of 1.25 and a maximum leverage ratio of 4.0. These proposed terms and conditions strike a balance between providing the borrower with the necessary financial flexibility and ensuring the lender's security and risk mitigation.\nAfter a comprehensive evaluation of the credit proposal, it is recommended to approve the facility for the following reasons. Firstly, the borrower demonstrates a strong financial position, supported by consistent revenue growth, healthy profitability margins, and robust cash flow generation. Their solid capital structure and prudent financial management provide assurance of their ability to meet their financial obligations. Secondly, the borrower operates in a dynamic industry and has successfully carved out a niche market with their unique value proposition and differentiated product offerings. Their strong market share, innovative marketing strategies, and ongoing investments in research and development position them for continued growth and market leadership. Additionally, the proposed terms and conditions of the credit facility are structured to provide the borrower with the necessary financial flexibility while ensuring the lender's security. The collateral and financial covenants offer adequate protection and align with industry standards. Overall, approving the credit facility will enable the borrower to capitalize on market opportunities, invest in further expansion, and contribute to their long-term success.\n"}
+hierarchy_file_name = "hierarchy_v2.json"
+
+hierarchy_dict_list = load_json(hierarchy_file_name)
+
+instruction_list = []
+for section_dict in hierarchy_dict_list:
+    create_new_dict = True
+    instruction_dict = {}
+    for dictionary in instruction_list:
+        if section_dict["Section"] == dictionary["Section"]: #If true, just modify the existing dict
+            if section_dict["Sub-section"] not in dictionary["Component"]:
+                dictionary["Component"].append(section_dict["Sub-section"])
+                create_new_dict = False
+    if create_new_dict:
+        instruction_dict = {"Section": section_dict["Section"],
+                                    "Component": [section_dict["Sub-section"]], # add the 'Sub-section' here
+                                    "Prompt": section_prompt_dict[section_dict["Section"]],
+                                    "Example": credit_proposal_example_dict[section_dict["Section"]] ,
+                                    "RM Note": "",
+                                    "Document": "",
+                                    "GPT Output": "",
+                                    "RM fill" : "",
+                                    "Others" : ""
+                                    }
+        instruction_list.append(instruction_dict)
+
+for l in instruction_list:
+    l["Component_Text"] = ', '.join(l["Component"])
+
+json.dump(instruction_list, open("Schema_v2.json", "w"), indent=4)
+
+# %%
