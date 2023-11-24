@@ -64,7 +64,6 @@ langchain==0.0.254
 langdetect==1.0.9
 langsmith==0.0.64
 layoutparser==0.3.4
-lingua-language-detector==2.0.0
 lxml==4.9.3
 Markdown==3.5.1
 MarkupSafe==2.1.3
