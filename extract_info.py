@@ -144,6 +144,8 @@ def web_extract_RM(section, rm_note_txt):
 
     hierarchy_dict_list = load_json(hierarchy_file_name)
 
+    hierarchy_dict_list = hierarchy_dict_list["content"]
+
     prompt_template_for_extracting_rm_note = """
     Read the following context, aggregate the context and answer the input question based on the aggregate context (Keyword: Question):
     
