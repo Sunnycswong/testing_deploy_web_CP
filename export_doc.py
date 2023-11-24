@@ -96,7 +96,7 @@ from docx import Document as DocxDocument
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 import re
-
+from io import BytesIO
 
 index_name = "credit-proposal"
 search_service = "gptdemosearch"
@@ -104,6 +104,9 @@ search_api_key = "PcAZcXbX2hJsxMYExc2SnkMFO0D94p7Zw3Qzeu5WjYAzSeDMuR5O"
 storage_service = "creditproposal"
 storage_api_key = "hJ2qb//J1I1KmVeDHBpwEpnwluoJzm+b6puc5h7k+dnDSFQ0oxuh1qBz+qPB/ZT7gZvGufwRbUrN+ASto6JOCw=="
 connect_str = f"DefaultEndpointsProtocol=https;AccountName={storage_service};AccountKey={storage_api_key}"
+
+connection_string = f"DefaultEndpointsProtocol=https;AccountName={storage_service};AccountKey={storage_api_key}"
+container_name = "exportdocs"
 
 doc_intell_endpoint = "https://doc-intelligence-test.cognitiveservices.azure.com/"
 doc_intell_key = "9fac3bb92b3c4ef292c20df9641c7374"
@@ -120,6 +123,12 @@ os.environ["AZURE_INDEX_NAME"] = index_name
 
 
 def create_docx(client_name, json_data):
+    
+    storage_service = "creditproposal"
+    storage_api_key = "hJ2qb//J1I1KmVeDHBpwEpnwluoJzm+b6puc5h7k+dnDSFQ0oxuh1qBz+qPB/ZT7gZvGufwRbUrN+ASto6JOCw=="
+    connection_string = f"DefaultEndpointsProtocol=https;AccountName={storage_service};AccountKey={storage_api_key}"
+    container_name = "exportdocs"
+    
     # Create a new Word document
     document = DocxDocument()
 
@@ -169,5 +178,17 @@ def create_docx(client_name, json_data):
                 # Normal text
                 run = paragraph.add_run(line)
 
-    # Save the Word document
-    document.save(client_name + '_Word_proposal.docx')
+    blob_name = client_name + '_Word_proposal.docx'
+    
+    # Save the Word document to a BytesIO object
+    document_bytes = BytesIO()
+    document.save(document_bytes)
+    document_bytes.seek(0)  # Reset the stream position to the beginning
+
+    # Store the Word document in Azure Blob Storage
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    container_client = blob_service_client.get_container_client(container_name)
+    blob_client = container_client.get_blob_client(blob_name)
+    blob_client.upload_blob(document_bytes)
+    
+    return 
