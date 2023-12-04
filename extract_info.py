@@ -96,6 +96,8 @@ from docx import Document as DocxDocument
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 import re
+from langchain.chains import SimpleSequentialChain
+from langchain.chains import SequentialChain
 
 # Setting credit
 index_name = "credit-proposal"
@@ -151,7 +153,7 @@ def load_json(json_path):
 
 #This funcition is to prepare the rm note in desired format for web, call by app.py
 def web_extract_RM(section, rm_note_txt, client):
-    hierarchy_file_name = "config/hierarchy_v2.json"
+    hierarchy_file_name = "hierarchy_v2.json"
 
     hierarchy_dict_list = load_json(hierarchy_file_name)
 
@@ -721,7 +723,6 @@ def regen_template():
         9. Please generate responses without using any subjective language or phrases that might express sentiments or personal judgments such as 'unfortunately'.
         10. Please generate responses that do not invent any numbers or statistics. You may only use figures if they are explicitly mentioned in the provided content.
         11. Do not add disclaimers or state the source of your information in your response.
-        12. If specific information is missing or not provided in the input information, return text at the end by follow this format: "[RM Please help provide further information on Keyword ]". Do not invent information or state that something is unclear. 
 
         If specific information is missing, use the following format: "[RM Please provide further information on Keyword ]". Do not invent information or state that something is unclear. 
         Do not mention any lack of specific information in the output.
@@ -730,6 +731,69 @@ def regen_template():
         """
     prompt_template_proposal = PromptTemplate(template=proposal_proposal_template_text, input_variables=["previous_paragraph", "rm_instruction"])
 
+
+    return prompt_template_proposal
+
+def review_prompt_template():
+    proposal_proposal_template_text = """
+        To complete this task. Your task is to review and edit the Input paragraph according to the instructions provided.
+
+        **Input Paragraph**
+        {first_gen_paragraph}
+
+        Double check the Input Paragraph does not contains any content from 'example'.
+
+        **Example**
+        {example}
+
+        1. Base your content on the client name and the input_info provided. Do not include content from 'example' in your output - it's for reference only.
+        2. Avoid mentioning "RM Note", "Component", or any meetings with the client. Instead, phrase your information as "It is mentioned that".
+        3. Do not mention the source of your input, justify your answers, or provide your own suggestions or recommendations.
+        4. Your response should be in English and divided into paragraphs. If a paragraph exceeds 100 words, break it down into smaller sections.
+        5. Don't include line breaks within sentences in the same paragraph.
+        6. Start your paragraph directly without a heading.
+        7. You can use point form or tables to present your answer, but do not introduce what the section includes.
+        8. Avoid phrases like "Based on the input json" or "it is mentioned".
+        9. Please generate responses without using any subjective language or phrases that might express sentiments or personal judgments such as 'unfortunately'.
+        10. Please generate responses that do not invent any numbers or statistics. You may only use figures if they are explicitly mentioned in the provided content.
+        11. Do not add disclaimers or state the source of your information in your response.
+        12. If specific information is missing or not provided in the input information, return text at the end by follow this format: "[RM Please help provide further information on Keyword ]". Do not invent information or state that something is unclear. 
+
+        
+        If specific information is missing, follow this format: "[RM Please help provide further information on Keyword]". Do not invent information or state that something is unclear. 
+        Make assumptions where necessary, but do not mention any lack of specific information in the output.
+        Take this task one step at a time and remember to breathe.
+        """
+    prompt_template_proposal = PromptTemplate(template=proposal_proposal_template_text, input_variables=["first_gen_paragraph", "example"])
+
+    return prompt_template_proposal
+
+def regenerate_review_prompt_template():
+    proposal_proposal_template_text = """
+        To complete this task. Your task is to review and edit the Input paragraph according to the instructions provided.
+
+        **Input Paragraph**
+        {re_gen_paragraph}
+
+        1. Base your content on the client name and the input_info provided. Do not include content from 'example' in your output - it's for reference only.
+        2. Avoid mentioning "RM Note", "Component", or any meetings with the client. Instead, phrase your information as "It is mentioned that".
+        3. Do not mention the source of your input, justify your answers, or provide your own suggestions or recommendations.
+        4. Your response should be in English and divided into paragraphs. If a paragraph exceeds 100 words, break it down into smaller sections.
+        5. Don't include line breaks within sentences in the same paragraph.
+        6. Start your paragraph directly without a heading.
+        7. You can use point form or tables to present your answer, but do not introduce what the section includes.
+        8. Avoid phrases like "Based on the input json" or "it is mentioned".
+        9. Please generate responses without using any subjective language or phrases that might express sentiments or personal judgments such as 'unfortunately'.
+        10. Please generate responses that do not invent any numbers or statistics. You may only use figures if they are explicitly mentioned in the provided content.
+        11. Do not add disclaimers or state the source of your information in your response.
+        12. If specific information is missing or not provided in the input information, return text at the end by follow this format: "[RM Please help provide further information on Keyword ]". Do not invent information or state that something is unclear. 
+
+        
+        If specific information is missing, follow this format: "[RM Please help provide further information on Keyword]". Do not invent information or state that something is unclear. 
+        Make assumptions where necessary, but do not mention any lack of specific information in the output.
+        Take this task one step at a time and remember to breathe.
+        """
+    prompt_template_proposal = PromptTemplate(template=proposal_proposal_template_text, input_variables=["re_gen_paragraph"])
 
     return prompt_template_proposal
 
@@ -787,8 +851,17 @@ def first_generate(section_name, input_json, client):
     
     chain = LLMChain(
         llm=llm_proposal,
-        prompt=prompt_template_proposal
+        prompt=prompt_template_proposal,
+        output_key="first_gen_paragraph"
     )
+
+    review_chain = LLMChain(llm=llm_proposal, prompt=review_prompt_template(), output_key="reviewed")
+
+    overall_chain = SequentialChain(chains=[chain, review_chain], 
+                                    input_variables=["input_info", "client_name", "example"],
+                                    # Here we return multiple variables
+                                    output_variables=["reviewed"],
+                                    verbose=True)
 
     # Break the input_json by parts
     input_info_str = []
@@ -803,7 +876,8 @@ def first_generate(section_name, input_json, client):
 
     final_dict = {"input_info": ", ".join(input_info_str), "Example": ", ".join(example_str)}
 
-    drafted_text = chain({"input_info": final_dict["input_info"], "client_name": client, "example": final_dict["Example"]})['text']
+    drafted_text = overall_chain({"input_info": final_dict["input_info"], "client_name": client, "example": final_dict["Example"]})
+    drafted_text = drafted_text["reviewed"]
     drafted_text2 = drafted_text.replace("Based on the given information, ", "").replace("It is mentioned that ", "")
 
     # All capital letters for first letter in sentences
@@ -856,10 +930,21 @@ def regen(section_name, previous_paragraph, rm_instruction):
     
     chain = LLMChain(
         llm=llm_proposal,
-        prompt=prompt_template_proposal
+        prompt=prompt_template_proposal,
+        output_key="re_gen_paragraph"
     )
 
-    drafted_text = chain({"previous_paragraph": previous_paragraph, "rm_instruction":rm_instruction})['text']
+    review_chain = LLMChain(llm=llm_proposal, prompt=regenerate_review_prompt_template(), output_key="reviewed")
+
+    overall_chain = SequentialChain(chains=[chain, review_chain], 
+                                    input_variables=["previous_paragraph", "rm_instruction"],
+                                    # Here we return multiple variables
+                                    output_variables=["reviewed"],
+                                    verbose=True)
+
+
+    drafted_text = overall_chain({"previous_paragraph": previous_paragraph, "rm_instruction":rm_instruction})
+    drafted_text = drafted_text["reviewed"]
     drafted_text2 = drafted_text.replace("Based on the given information, ", "").replace("It is mentioned that ", "")
 
     #All capital letters for first letter in sentences
