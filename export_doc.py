@@ -97,6 +97,8 @@ from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 import re
 from io import BytesIO
+import datetime
+
 
 index_name = "credit-proposal"
 search_service = "gptdemosearch"
@@ -111,15 +113,24 @@ container_name = "exportdocs"
 doc_intell_endpoint = "https://doc-intelligence-test.cognitiveservices.azure.com/"
 doc_intell_key = "9fac3bb92b3c4ef292c20df9641c7374"
 
-# set up openai environment
-os.environ["OPENAI_API_TYPE"] = "azure"
-os.environ["OPENAI_API_BASE"] = "https://pwcjay.openai.azure.com/"
-os.environ["OPENAI_API_VERSION"] = "2023-05-15"
-os.environ["OPENAI_API_KEY"] = "f282a661571f45a0bdfdcd295ac808e7"
 
-os.environ["AZURE_COGNITIVE_SEARCH_SERVICE_NAME"] = search_service
-os.environ["AZURE_COGNITIVE_SEARCH_API_KEY"] = search_api_key
-os.environ["AZURE_INDEX_NAME"] = index_name
+# set up openai environment - Jay
+#os.environ["OPENAI_API_TYPE"] = "azure"
+#os.environ["OPENAI_API_BASE"] = "https://pwcjay.openai.azure.com/"
+#os.environ["OPENAI_API_VERSION"] = "2023-05-15"
+#os.environ["OPENAI_API_KEY"] = "f282a661571f45a0bdfdcd295ac808e7"
+
+
+# set up openai environment - Ethan
+os.environ["OPENAI_API_TYPE"] = "azure"
+os.environ["OPENAI_API_BASE"] = "https://lwyethan-azure-openai-test-01.openai.azure.com/"
+os.environ["OPENAI_API_VERSION"] = "2023-05-15"
+os.environ["OPENAI_API_KEY"] = "ff96d48045584cb9844fc70e5b802918"
+
+# Setting up ACS -Jay
+#os.environ["AZURE_COGNITIVE_SEARCH_SERVICE_NAME"] = search_service
+#os.environ["AZURE_COGNITIVE_SEARCH_API_KEY"] = search_api_key
+#os.environ["AZURE_INDEX_NAME"] = index_name
 
 
 def create_docx(client_name, json_data):
@@ -177,8 +188,11 @@ def create_docx(client_name, json_data):
             else:
                 # Normal text
                 run = paragraph.add_run(line)
-
-    blob_name = client_name + '_Word_proposal.docx'
+                
+    current_time = datetime.datetime.now()
+    time_string = current_time.strftime("_%Y_%m_%d_%H_%M_%S")
+    
+    blob_name = client_name + time_string + '_Word_proposal.docx'
     
     # Save the Word document to a BytesIO object
     document_bytes = BytesIO()
@@ -190,5 +204,8 @@ def create_docx(client_name, json_data):
     container_client = blob_service_client.get_container_client(container_name)
     blob_client = container_client.get_blob_client(blob_name)
     blob_client.upload_blob(document_bytes)
+
+    # Make sure to reset the stream position again before returning
+    document_bytes.seek(0) 
     
-    return 
+    return blob_name, container_name, storage_service, document_bytes
