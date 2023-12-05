@@ -153,7 +153,7 @@ def load_json(json_path):
 
 #This funcition is to prepare the rm note in desired format for web, call by app.py
 def web_extract_RM(section, rm_note_txt, client):
-    hierarchy_file_name = "hierarchy_v2.json"
+    hierarchy_file_name = "config/hierarchy_v2.json"
 
     hierarchy_dict_list = load_json(hierarchy_file_name)
 
